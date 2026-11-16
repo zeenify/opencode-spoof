@@ -1,0 +1,8 @@
+node_modules/
+scratch/
+models.json
+models.md
+debug-requests.jsonl
+*.log
+.DS_Store
+Thumbs.db

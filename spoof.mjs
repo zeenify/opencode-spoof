@@ -461,6 +461,7 @@ async function upstreamChat(bodyStr, token, attempt = 0) {
     return { status: 0, contentType: "", body: stream, error: err.message }
   }
 
+  const startedAt = Date.now()
   await Bun.sleep(300) // let the TLS handshake finish before writing
   let req = `POST ${UPSTREAM_PATH}/chat/completions HTTP/1.1\r\n`
   for (const [k, v] of headers) req += `${k}: ${v}\r\n`
@@ -476,6 +477,14 @@ async function upstreamChat(bodyStr, token, attempt = 0) {
     sock.end()
     await refreshToken(true)
     return upstreamChat(bodyStr, cache.data.access, 1)
+  }
+
+  // A connection that dies fast (not a long timeout) is retried once: the very
+  // first request after startup can race the TLS handshake.
+  if (status === 0 && attempt === 0 && Date.now() - startedAt < 30_000) {
+    sock.end()
+    await Bun.sleep(250)
+    return upstreamChat(bodyStr, token, 1)
   }
 
   return { status, contentType, body: stream, error: upstreamError?.message }

@@ -648,12 +648,14 @@ const json = (data, status = 200) =>
 const started = Date.now()
 let requests = 0
 
-const server = Bun.serve({
-  port: PORT,
-  hostname: HOST,
-  idleTimeout: 255,
+let server
+try {
+  server = Bun.serve({
+    port: PORT,
+    hostname: HOST,
+    idleTimeout: 255,
 
-  async fetch(req) {
+    async fetch(req) {
     const url = new URL(req.url)
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors() })
 
@@ -769,7 +771,17 @@ const server = Bun.serve({
     console.error("[fatal]", err)
     return json({ error: { message: String(err?.message ?? err), type: "server_error" } }, 500)
   },
-})
+  })
+} catch (err) {
+  const msg = String(err?.message ?? err)
+  if (msg.includes("EADDRINUSE") || String(err?.code ?? "").includes("EADDRINUSE")) {
+    console.error(`\n  Port ${PORT} is already in use - opencode-spoof looks like it is already running.`)
+    console.error(`  Use the running instance, or start this one on another port:`)
+    console.error(`      set OPENCODE_SPOOF_PORT=${PORT + 1} && bun spoof.mjs\n`)
+    process.exit(1)
+  }
+  throw err
+}
 
 console.log(`opencode spoof proxy v2 listening on http://${HOST}:${server.port}`)
 console.log(`  upstream      : https://${UPSTREAM_HOST}${UPSTREAM_PATH}`)

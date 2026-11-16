@@ -37,7 +37,44 @@ const CONSOLE = "https://opencode.ai/console"
 const CLIENT_ID = "opencode-cli"
 
 const CHANNEL = process.env.OPENCODE_CHANNEL ?? "latest"
-const VERSION = process.env.OPENCODE_VERSION ?? "2.2.5"
+/** Version of the installed opencode CLI, if it can be determined. */
+function detectOpencodeVersion() {
+  const pkgCandidates = [
+    join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "npm", "node_modules", "@opencode", "cli", "package.json"),
+    join(homedir(), ".npm-global", "lib", "node_modules", "@opencode", "cli", "package.json"),
+    "/usr/local/lib/node_modules/@opencode/cli/package.json",
+    "/usr/lib/node_modules/@opencode/cli/package.json",
+    "/opt/homebrew/lib/node_modules/@opencode/cli/package.json",
+    join(homedir(), ".bun", "install", "global", "node_modules", "@opencode", "cli", "package.json"),
+  ]
+  for (const p of pkgCandidates) {
+    try {
+      if (existsSync(p)) return JSON.parse(readFileSync(p, "utf8")).version ?? null
+    } catch {}
+  }
+  try {
+    const r = Bun.spawnSync(["opencode", "--version"], { stdout: "pipe", stderr: "ignore" })
+    const v = r.stdout.toString().trim().split(/\s+/).pop()
+    if (/^\d+\.\d+\.\d+/.test(v)) return v
+  } catch {}
+  return null
+}
+
+/** opencode's data directory differs across platforms and setups. */
+function resolveDbPath() {
+  const candidates = [
+    process.env.OPENCODE_DB,
+    process.env.OPENCODE_DATA ? join(process.env.OPENCODE_DATA, "opencode.db") : null,
+    process.env.XDG_DATA_HOME ? join(process.env.XDG_DATA_HOME, "opencode", "opencode.db") : null,
+    join(homedir(), ".local", "share", "opencode", "opencode.db"),
+    join(homedir(), "Library", "Application Support", "opencode", "opencode.db"),
+    process.env.APPDATA ? join(process.env.APPDATA, "opencode", "opencode.db") : null,
+  ].filter(Boolean)
+  return candidates.find((p) => existsSync(p)) ?? candidates[0]
+}
+
+const INSTALLED_VERSION = detectOpencodeVersion()
+const VERSION = process.env.OPENCODE_VERSION ?? INSTALLED_VERSION ?? "2.2.5"
 const NAME = process.env.OPENCODE_CLIENT ?? "cli"
 const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${NAME}`
 
@@ -46,19 +83,28 @@ const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${NAME}`
 const SPOOF_DIR = process.env.OPENCODE_SPOOF_DIR ?? process.cwd()
 const normalizePath = (p) => String(p).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
 
-const DB_PATH =
-  process.env.OPENCODE_DB ??
-  join(process.env.OPENCODE_DATA ?? join(homedir(), ".local", "share", "opencode"), "opencode.db")
+const DB_PATH = resolveDbPath()
 
-const PROMPT_FILE = process.env.OPENCODE_AGENT_PROMPT_FILE ?? join(import.meta.dir, "agent-prompt.json")
+const PROMPT_FILE = process.env.OPENCODE_AGENT_PROMPT_FILE ?? join(import.meta.dir, "agent-prompts.json")
 const INJECT = process.env.OPENCODE_PROMPT_INJECT !== "0"
 const TIMEOUT_MS = Number(process.env.OPENCODE_SPOOF_TIMEOUT_MS ?? 600000)
 const REFRESH_SKEW_MS = 5 * 60 * 1000
 
 /* ------------------------------------------------- whitelisted prompt/tools -- */
 
-const AGENT = JSON.parse(readFileSync(PROMPT_FILE, "utf8"))
-const OPENCODE_SYSTEM = AGENT.system
+// agent-prompts.json holds one prompt per opencode version; pick the one that
+// matches the installed version, else the file's default. Old single-prompt
+// files ("agent-prompt.json" with a top-level `system`) still load.
+const PROMPTS = JSON.parse(readFileSync(PROMPT_FILE, "utf8"))
+function selectPrompt() {
+  if (!PROMPTS.prompts) return { version: PROMPTS.opencodeVersion ?? "unknown", system: PROMPTS.system, exact: true }
+  const exact = INSTALLED_VERSION && PROMPTS.prompts[INSTALLED_VERSION]
+  if (exact) return { version: INSTALLED_VERSION, system: exact.system, exact: true }
+  const fallbackVersion = PROMPTS.default
+  return { version: fallbackVersion, system: PROMPTS.prompts[fallbackVersion].system, exact: false }
+}
+const SELECTED_PROMPT = selectPrompt()
+const OPENCODE_SYSTEM = SELECTED_PROMPT.system
 // The gate only requires a tool literally named `read`; every other opencode
 // tool can be dropped. Keeping just this disabled stub stops the model from
 // calling opencode's own file tools instead of the harness's.
@@ -567,37 +613,21 @@ async function aggregate(stream, renames) {
 
 /* ------------------------------------------------------- version drift -- */
 
-/** Version of the installed opencode CLI, if it can be determined. */
-function installedOpencodeVersion() {
-  const pkgCandidates = [
-    join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "npm", "node_modules", "@opencode", "cli", "package.json"),
-    join(homedir(), ".npm-global", "lib", "node_modules", "@opencode", "cli", "package.json"),
-    "/usr/local/lib/node_modules/@opencode/cli/package.json",
-    "/usr/lib/node_modules/@opencode/cli/package.json",
-  ]
-  for (const p of pkgCandidates) {
-    try {
-      if (existsSync(p)) return JSON.parse(readFileSync(p, "utf8")).version ?? null
-    } catch {}
-  }
-  try {
-    const r = Bun.spawnSync(["opencode", "--version"], { stdout: "pipe", stderr: "ignore" })
-    const v = r.stdout.toString().trim().split(/\s+/).pop()
-    if (/^\d+\.\d+\.\d+/.test(v)) return v
-  } catch {}
-  return null
-}
-
 /**
- * The gate's prompt is version-specific. It is assembled from several string
- * fragments inside the binary, so it cannot be rebuilt automatically — but the
- * version alone is a reliable drift signal.
+ * The prompt is selected from agent-prompts.json by installed version. When the
+ * installed version has no entry, the file's default is used and a warning is
+ * printed — the gate may still accept it (it did across 2.2.5 → 2.3.0), but the
+ * refresh recipe in docs/HOW-IT-WORKS.md is the fix if requests start failing.
  */
 function checkPromptDrift() {
-  const shipped = AGENT.opencodeVersion ?? null
-  const installed = installedOpencodeVersion()
-  if (!installed || !shipped) return { checked: false, reason: "version unknown" }
-  return { checked: true, same: installed === shipped, shipped, installed }
+  if (!PROMPTS.prompts) return { checked: true, same: true, installed: INSTALLED_VERSION, used: SELECTED_PROMPT.version }
+  if (!INSTALLED_VERSION) return { checked: false, reason: "installed opencode version unknown" }
+  return {
+    checked: true,
+    same: Boolean(PROMPTS.prompts[INSTALLED_VERSION]),
+    installed: INSTALLED_VERSION,
+    used: SELECTED_PROMPT.version,
+  }
 }
 
 /* ----------------------------------------------------------------- server -- */
@@ -758,13 +788,13 @@ try {
 
 const drift = checkPromptDrift()
 if (!drift.checked) {
-  console.log(`  prompt drift  : not checked (${drift.reason})`)
+  console.log(`  prompt version: not checked (${drift.reason}); using ${drift.used}`)
 } else if (drift.same) {
-  console.log(`  prompt drift  : none — prompt captured from opencode ${drift.shipped}, installed ${drift.installed}`)
+  console.log(`  prompt version: ${drift.used} (exact match with installed opencode ${drift.installed})`)
 } else {
   console.warn(
-    `  prompt drift  : POSSIBLE — prompt captured from opencode ${drift.shipped}, installed ${drift.installed}.\n` +
-      "                  If requests start failing with FreeUsageLimitError while opencode itself works,\n" +
-      "                  refresh agent-prompt.json (docs/HOW-IT-WORKS.md §2 and §10).",
+    `  prompt version: ${drift.used} (no entry for installed opencode ${drift.installed} — using default).\n` +
+      "                  If requests fail with FreeUsageLimitError while opencode itself works,\n" +
+      "                  refresh agent-prompts.json (docs/HOW-IT-WORKS.md §2 and §10).",
   )
 }

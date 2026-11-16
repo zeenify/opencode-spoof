@@ -126,7 +126,7 @@ opencode-spoof/
 ├── packages/
 │   ├── spoof/                ← the direct API proxy  (port 8788)
 │   │   ├── spoof.mjs
-│   │   ├── agent-prompt.json ← whitelisted prompt + source version
+│   │   ├── agent-prompts.json ← whitelisted prompts, one per opencode version
 │   │   ├── setup-check.mjs
 │   │   ├── test-spoof.mjs
 │   │   └── start.cmd
@@ -155,7 +155,7 @@ opencode-spoof/
 - **Prompt overhead:** ~14.7 KB (≈3.5K tokens) prepended per request, mostly prompt-cached.
 - **Session freshness:** the borrowed session expires if opencode isn't used for ~a day; open it once and it works again.
 - **Tool renaming:** tools literally named `Read`/`Edit` travel as `view_file`/`apply_patch` and are mapped back.
-- **Version drift:** the prompt is version-specific. The proxy warns when your opencode version differs from the captured one; refresh recipe in [HOW-IT-WORKS §2/§10](docs/HOW-IT-WORKS.md).
+- **Version drift:** prompts are stored per opencode version. Unknown versions fall back to the newest entry and print a warning; add a new capture with the recipe in [HOW-IT-WORKS §2/§10](docs/HOW-IT-WORKS.md).
 - **Quota is per-IP and shared** with your opencode app. This does not create more AI — it just lets you use what you have from anywhere.
 
 ## 🛑 Honest disclaimer
@@ -200,4 +200,4 @@ Issues and PRs welcome — especially:
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The system prompt in `packages/spoof/agent-prompt.json` belongs to opencode and is included only as a runtime compatibility artifact.
+MIT — see [LICENSE](LICENSE). The system prompts in `packages/spoof/agent-prompts.json` belong to opencode and is included only as a runtime compatibility artifact.

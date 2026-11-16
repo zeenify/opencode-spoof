@@ -173,7 +173,7 @@ From there, every experiment mutated exactly one element of the working request.
 
 Interpretation: the gate requires `messages[0].content` to **start with** a whitelist entry. Appending is allowed (that is what lets us add the override), prepending or truncating is not.
 
-The proxy uses the **agent** prompt (14,688 chars). A smaller **title-generation** prompt (1,806 chars) also passes the gate, but only for tool-less requests; the minimal passing prefix measured for it was between 1,132 and 1,353 chars. The agent prompt is required when tools are present.
+The proxy ships one prompt per version (`agent-prompts.json`): 2.2.5 is 14,688 chars, 2.3.0 is 14,699 — the first difference is at char 2061 (a tools list). Both were tested; the 2.2.5 prompt still passed after upgrading the CLI to 2.3.0, confirming the gate compares a stable prefix. It uses the **agent** prompt. A smaller **title-generation** prompt (1,806 chars) also passes the gate, but only for tool-less requests; the minimal passing prefix measured for it was between 1,132 and 1,353 chars. The agent prompt is required when tools are present.
 
 ### 5.3 Rule 2 — `stream: true`
 
@@ -292,7 +292,7 @@ If requests start failing while the TUI works:
 
 1. Capture again (§2) and confirm the endpoint and header names still match.
 2. Replay a genuine request byte for byte. If that works, check the four rules in order:
-   - does the system prompt still start with a currently-whitelisted prompt? (The prompt text may change between versions — extract a fresh one and replace `agent-prompt.json`.)
+   - does the system prompt still start with a currently-whitelisted prompt? (The prompt text may change between versions — extract a fresh one and add it to `agent-prompts.json` under the new version key (old entries stay, so it works for people on older CLIs).)
    - is `stream` still required?
    - do the session IDs still decode the same way, and does a fresh real ID still pass? (If opencode changes the format, borrowing still works.)
    - is `read` still the required tool name, and are extra `Read`/`Edit` tools still denied?

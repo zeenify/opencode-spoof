@@ -556,6 +556,41 @@ async function aggregate(stream, renames) {
   }
 }
 
+/* ------------------------------------------------------- version drift -- */
+
+/** Version of the installed opencode CLI, if it can be determined. */
+function installedOpencodeVersion() {
+  const pkgCandidates = [
+    join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "npm", "node_modules", "@opencode", "cli", "package.json"),
+    join(homedir(), ".npm-global", "lib", "node_modules", "@opencode", "cli", "package.json"),
+    "/usr/local/lib/node_modules/@opencode/cli/package.json",
+    "/usr/lib/node_modules/@opencode/cli/package.json",
+  ]
+  for (const p of pkgCandidates) {
+    try {
+      if (existsSync(p)) return JSON.parse(readFileSync(p, "utf8")).version ?? null
+    } catch {}
+  }
+  try {
+    const r = Bun.spawnSync(["opencode", "--version"], { stdout: "pipe", stderr: "ignore" })
+    const v = r.stdout.toString().trim().split(/\s+/).pop()
+    if (/^\d+\.\d+\.\d+/.test(v)) return v
+  } catch {}
+  return null
+}
+
+/**
+ * The gate's prompt is version-specific. It is assembled from several string
+ * fragments inside the binary, so it cannot be rebuilt automatically — but the
+ * version alone is a reliable drift signal.
+ */
+function checkPromptDrift() {
+  const shipped = AGENT.opencodeVersion ?? null
+  const installed = installedOpencodeVersion()
+  if (!installed || !shipped) return { checked: false, reason: "version unknown" }
+  return { checked: true, same: installed === shipped, shipped, installed }
+}
+
 /* ----------------------------------------------------------------- server -- */
 
 function cors(extra = {}) {
@@ -710,4 +745,17 @@ try {
   )
 } catch (err) {
   console.error(`  account       : unavailable — ${err.message}`)
+}
+
+const drift = checkPromptDrift()
+if (!drift.checked) {
+  console.log(`  prompt drift  : not checked (${drift.reason})`)
+} else if (drift.same) {
+  console.log(`  prompt drift  : none — prompt captured from opencode ${drift.shipped}, installed ${drift.installed}`)
+} else {
+  console.warn(
+    `  prompt drift  : POSSIBLE — prompt captured from opencode ${drift.shipped}, installed ${drift.installed}.\n` +
+      "                  If requests start failing with FreeUsageLimitError while opencode itself works,\n" +
+      "                  refresh agent-prompt.json (docs/HOW-IT-WORKS.md §2 and §10).",
+  )
 }

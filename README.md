@@ -29,12 +29,25 @@ your harness ──► http://127.0.0.1:8788/v1 ──► opencode.ai/inference/
 
 ## Quick start
 
+**Windows:** double-click **`setup.cmd`** — it verifies Bun, your opencode sign-in, and a recent session, then starts the proxy and prints the connection settings. Leave the window open.
+
+**macOS / Linux:**
+
 ```sh
 git clone <this repo> opencode-spoof
 cd opencode-spoof
-npm install          # only needed for the session-mode bridge and the test script
-bun spoof.mjs        # or double-click start-spoof.cmd on Windows
+./setup.sh
 ```
+
+**Manual** (any OS):
+
+```sh
+npm install          # only needed for the session-mode bridge and the test script
+bun setup-check.mjs  # preflight: Bun, sign-in, session, prompt
+bun spoof.mjs        # or: bun start
+```
+
+New to this? Read **[docs/SETUP.md](docs/SETUP.md)** — a step-by-step guide written for people who don't live in a terminal, including where to click in ZCode, Open WebUI, Chatbox, and others.
 
 You should see:
 
@@ -46,6 +59,7 @@ opencode spoof proxy v2 listening on http://127.0.0.1:8788
   tools merged  : 1 opencode tools kept
   creds         : C:\Users\<you>\.local\share\opencode\opencode.db
   account       : you@example.com / Default
+  prompt drift  : none — prompt captured from opencode 2.2.5, installed 2.2.5
 ```
 
 Sanity check:
@@ -145,6 +159,20 @@ Everything else is yours. The full investigation — including five dead ends an
 | Token auto-refresh (OAuth) | yes |
 | Embeddings, images, audio, `/v1/responses` | no |
 
+## FAQ
+
+**Does this work for someone who clones the repo?**
+Yes. The repository contains no credentials or account data. Each person's copy reads *their own* opencode login, *their own* session, and spends *their own* quota. They need opencode installed, signed in, and used at least once recently — `setup-check.mjs` verifies all three and tells them exactly what to fix.
+
+**What happens when opencode updates and changes the prompt?**
+The prompt is version-specific. The proxy compares the version recorded in `agent-prompt.json` with the version you have installed and prints `prompt drift: POSSIBLE` when they differ. If requests then fail, capture a fresh request and replace the prompt once — the recipe is in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) §2 and §10. The proxy cannot rebuild the prompt from the binary automatically because opencode stores it as scattered fragments.
+
+**Is there a no-terminal setup?**
+Yes — double-click `setup.cmd` on Windows, or follow [docs/SETUP.md](docs/SETUP.md), which is written without jargon and covers the exact clicks for common chat apps.
+
+**Is my request secretly being sent more than once?**
+No. One request in, one upstream request out. The only automatic retry is a single retry after an OAuth token refresh (HTTP 401). With `OPENCODE_SPOOF_DEBUG=1` every incoming request is written to `debug-requests.jsonl` so you can count them yourself.
+
 ## Limitations
 
 - **The model sees a ~14.7 KB prompt prefix** on every request (~3.5 K tokens; mostly prompt-cached, so repeats cost ~700 tokens). An override tells it to follow your instructions, but the extra context is real.
@@ -185,10 +213,13 @@ Everything else is yours. The full investigation — including five dead ends an
 | --- | --- |
 | `spoof.mjs` | The proxy (no npm dependencies, Bun built-ins only) |
 | `bridge.mjs` | Session-mode bridge (OpenAI API → opencode session) |
-| `agent-prompt.json` | System prompt + required tool stub, extracted from the opencode CLI's own request |
+| `agent-prompt.json` | System prompt + source opencode version, captured from the CLI's own request |
+| `setup.cmd` / `setup.sh` | One-click setup: checks everything, then starts the proxy |
+| `setup-check.mjs` | Preflight checks (Bun, sign-in, recent session, prompt drift) |
 | `test-spoof.mjs` | Streaming + tool-calling smoke test |
-| `start-spoof.cmd` / `start.cmd` | Windows launchers |
+| `start-spoof.cmd` / `start.cmd` | Launchers without the checks |
 | `refresh-models.cmd` | Refresh and open the model catalog (session mode) |
+| `docs/SETUP.md` | Setup guide for non-technical users |
 | `docs/PLAIN-ENGLISH.md` | The whole thing explained without jargon |
 | `docs/HOW-IT-WORKS.md` | Full research log: experiments, dead ends, findings, re-derivation guide |
 

@@ -466,12 +466,20 @@ async function upstreamChat(bodyStr, token, attempt = 0) {
     }
   }
 
+  let drainResolve = null
   try {
     sock = await Bun.connect({
       hostname: UPSTREAM_HOST,
       port: 443,
       tls: { serverName: UPSTREAM_HOST },
       socket: {
+        drain() {
+          if (drainResolve) {
+            const r = drainResolve
+            drainResolve = null
+            r()
+          }
+        },
         data(_u, chunk) {
           if (finished) return
           st.buf = Buffer.concat([st.buf, chunk])
@@ -512,7 +520,32 @@ async function upstreamChat(bodyStr, token, attempt = 0) {
   let req = `POST ${UPSTREAM_PATH}/chat/completions HTTP/1.1\r\n`
   for (const [k, v] of headers) req += `${k}: ${v}\r\n`
   req += `\r\n${bodyStr}`
-  sock.write(req)
+  if (process.env.OPENCODE_SPOOF_DUMP) {
+    try {
+      appendFileSync(join(import.meta.dir, "..", "..", "dump-request.txt"), req + "\n=====END=====\n")
+    } catch {}
+  }
+
+  // Bun's TLS socket accepts at most ~384 KiB per write() call and returns the
+  // number of bytes taken. Long conversations exceed that, so keep writing the
+  // remainder (waiting for drain) — ignoring this silently truncated the request.
+  const reqBuf = Buffer.from(req, "utf8")
+  let off = 0
+  let stalls = 0
+  while (off < reqBuf.length && !finished) {
+    const n = sock.write(reqBuf.subarray(off))
+    if (n > 0) {
+      off += n
+      stalls = 0
+    } else {
+      stalls++
+    }
+    if (off >= reqBuf.length) break
+    const drained = new Promise((r) => (drainResolve = r))
+    await Promise.race([drained, Bun.sleep(stalls > 5 ? 500 : 50)])
+  }
+  drainResolve = null
+  if (off < reqBuf.length) console.error(`[chat] short write: ${off}/${reqBuf.length} bytes`)
 
   const { status, contentType } = await Promise.race([
     start,
@@ -701,7 +734,12 @@ try {
         return json({ error: { message: err.message, type: "auth_error" } }, 401)
       }
 
+      const t0 = Date.now()
       const res = await upstreamChat(bodyStr, token)
+      const ttfb = Date.now() - t0
+      console.log(
+        `[chat] ${parsed.model} bytes=${bodyStr.length} msgs=${parsed.messages?.length ?? 0} status=${res.status || "conn-fail"} ttfb=${ttfb}ms`,
+      )
       if (res.status === 0) {
         return json({ error: { message: `upstream connection failed: ${res.error ?? "timeout"}`, type: "upstream_error" } }, 502)
       }

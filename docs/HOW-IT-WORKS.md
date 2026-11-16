@@ -262,6 +262,7 @@ Responses are the upstream stream, passed through after de-chunking; `view_file`
 ## 7. Implementation notes
 
 - **Transport.** `spoof.mjs` uses `Bun.connect({ tls: true })` and writes the HTTP request manually. It is not required for the gate (Bun `fetch` produces the same ClientHello), but it gives exact control over bytes and lets the proxy de-chunk the response itself.
+- **Bun's TLS write cap (the long-conversation hang).** `socket.write()` on a Bun TLS socket accepts at most **393,216 bytes (384 KiB)** per call and *returns the number accepted*. Writing a larger request in one call silently drops the remainder: the server waits for bytes that never arrive and closes the connection ~15–31 s later, which looks exactly like a hang. The proxy loops on `write()`, writing the remainder and waiting for the `drain` callback. Measured after the fix: 2 MB bodies (~500k tokens) complete normally.
 - **De-chunking is mandatory.** The upstream streams chunked SSE and does not close the socket when done. The proxy implements a small HTTP/1.1 chunk decoder and closes at the terminal chunk — without this, non-streaming clients hang.
 - **Token refresh** mirrors the CLI: on expiry (5-minute skew) or a 401, `POST /console/auth/device/token` with the stored refresh token, then write the rotated credential back into opencode's DB so the CLI and proxy stay in sync. Refreshes are single-flight.
 - **Ordering.** `prepareBody` records the client's `stream` intent *before* forcing it, so the response stage knows whether to aggregate.

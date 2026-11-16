@@ -55,6 +55,8 @@ Where to paste them in common apps:
 
 ## How to know it works
 
+Want the full model list? Double-click **`refresh-models.cmd`** — it writes `models.md` (704 models, free ones first) into the folder and opens it.
+
 With the setup window open, open a second terminal in the folder and run:
 
 ```sh

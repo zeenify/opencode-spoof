@@ -122,7 +122,7 @@ Everything else — headers, TLS, header order, JSON key order, project ID, temp
 ```text
 opencode-spoof/
 ├── setup.cmd / setup.sh      ← one-click setup (checks + start)
-├── refresh-models.cmd        ← refresh the model catalog (session mode)
+├── refresh-models.cmd        ← build models.md / models.json (works standalone)
 ├── packages/
 │   ├── spoof/                ← the direct API proxy  (port 8788)
 │   │   ├── spoof.mjs
@@ -132,6 +132,7 @@ opencode-spoof/
 │   │   └── start.cmd
 │   └── bridge/               ← session bridge        (port 8787)
 │       ├── bridge.mjs        ← prompts through a real opencode session
+│       ├── refresh-models.mjs ← standalone catalog refresh
 │       ├── probe-models.mjs
 │       └── start.cmd
 └── docs/

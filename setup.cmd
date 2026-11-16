@@ -25,7 +25,7 @@ if not exist "packages\spoof\agent-prompt.json" (
   exit /b 1
 )
 
-bun "packages\spoof\setup-check.mjs"
+call bun "packages\spoof\setup-check.mjs"
 if errorlevel 1 (
   echo.
   pause
@@ -41,5 +41,5 @@ echo ============================================
 echo.
 
 if not defined OPENCODE_SPOOF_PORT set OPENCODE_SPOOF_PORT=8788
-bun "packages\spoof\spoof.mjs"
+call bun "packages\spoof\spoof.mjs"
 pause

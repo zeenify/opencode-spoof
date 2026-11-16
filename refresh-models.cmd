@@ -1,13 +1,37 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-if not defined OPENCODE_BRIDGE_PORT set OPENCODE_BRIDGE_PORT=8787
-echo Refreshing model catalog...
-curl -s -X POST "http://127.0.0.1:%OPENCODE_BRIDGE_PORT%/v1/models/refresh"
+
+echo ============================================
+echo   opencode-spoof - refresh model catalog
+echo ============================================
 echo.
-if exist "%~dp0models.md" (
-  echo Opening models.md
-  start "" "%~dp0models.md"
-) else (
-  echo models.md was not created. Is the bridge running?
+
+where bun >nul 2>nul
+if errorlevel 1 (
+  echo   X  Bun is not installed.
+  echo      Install it with:  npm install -g bun
+  echo.
+  pause
+  exit /b 1
 )
+
+call bun "packages\bridge\refresh-models.mjs"
+if errorlevel 1 (
+  echo.
+  echo   Could not build the catalog.
+  echo   Make sure opencode is installed and signed in, then try again.
+  echo.
+  pause
+  exit /b 1
+)
+
+echo.
+if exist "models.md" (
+  echo Opening models.md
+  start "" "models.md"
+) else (
+  echo models.md was not created.
+)
+echo.
+pause

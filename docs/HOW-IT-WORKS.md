@@ -271,7 +271,7 @@ Responses are the upstream stream, passed through after de-chunking; `view_file`
 
 | Test | Proves |
 | --- | --- |
-| `bun test-spoof.mjs` | OpenAI SDK, streaming, custom tool → `tool_calls`, usage |
+| `bun run test` | OpenAI SDK, streaming, custom tool → `tool_calls`, usage |
 | Kill every opencode process, then send a request with a persona system prompt | model follows **your** instructions; no opencode runtime involved |
 | Custom `get_weather` tool, ask for Paris | native function calling works end-to-end |
 | `Read` tool, ask to read a file | rename round-trip: request carries `view_file`, response returns `Read` with correct args |

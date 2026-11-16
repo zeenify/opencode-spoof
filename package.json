@@ -1,18 +1,22 @@
 {
   "name": "opencode-spoof",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "private": true,
   "description": "Use your own opencode account's models (including free ones) from any OpenAI-compatible client, with native tool calling",
   "type": "module",
   "scripts": {
-    "start": "bun spoof.mjs",
-    "start:bridge": "bun bridge.mjs",
-    "test": "bun test-spoof.mjs"
+    "start": "bun packages/spoof/spoof.mjs",
+    "bridge": "bun packages/bridge/bridge.mjs",
+    "check": "bun packages/spoof/setup-check.mjs",
+    "test": "bun packages/spoof/test-spoof.mjs"
   },
   "keywords": [
     "opencode",
     "openai-compatible",
     "proxy",
-    "local"
+    "local",
+    "tool-calling",
+    "llm"
   ],
   "license": "MIT",
   "dependencies": {

@@ -1,228 +1,202 @@
-# opencode-spoof
+<div align="center">
 
-Use the models from **your own [opencode](https://opencode.ai) account** — including the free ones — from any OpenAI-compatible client, chatbot, or agent harness, **with native tool calling**.
+# 🎭 opencode-spoof
 
-It exposes a local OpenAI-compatible API (`http://127.0.0.1:8788/v1`) and calls opencode's own inference endpoint directly, using the credentials already on your machine. No opencode process runs; your harness keeps its own tool loop, so subagents, file tools, and MCP tools work.
+### Use your own opencode models — free ones included — from **any** OpenAI-compatible app.
+
+**Native tool calling · Streaming · Reasoning · Subagents · Zero config**
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#quick-start)
+[![Runtime](https://img.shields.io/badge/runtime-Bun-black.svg)](https://bun.sh)
+[![Status](https://img.shields.io/badge/status-experimental-orange.svg)](#-limitations)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
 ```text
-your harness ──► http://127.0.0.1:8788/v1 ──► opencode.ai/inference/openai/v1
-                                              (your account, your quota)
+  your harness / chatbot / script
+              │   OpenAI Chat Completions
+              ▼
+   http://127.0.0.1:8788/v1        ←  this proxy
+              │   one direct HTTPS call
+              ▼
+   opencode.ai/inference/openai/v1
+       your account · your quota
 ```
+
+</div>
 
 ---
 
-> ## ⚠️ Read this before using
->
-> - **This is a compatibility tool for your own account, not "free AI for everyone".** It works by making requests look like they came from opencode's own CLI. opencode intends free models to be used inside opencode; doing this very likely violates their terms, and they can change or block the checks at any time.
-> - **Your quota is not increased.** Every call spends the same free bucket as your opencode TUI — it is shared per IP address. Heavy use drains it for every device on that network.
-> - **Use your own credentials.** Never run this against someone else's account, never share your `opencode.db`, and do not sell access.
-> - **No warranty.** If this breaks after an opencode update, that is expected. The [research notes](docs/HOW-IT-WORKS.md) explain how it was derived so it can be re-derived.
-> - Do not publicly repackage this as a paid service or a bulk "free API".
+## 🤔 The problem
 
----
+opencode gives you free AI models — but only **inside opencode**. Call the same model from Cursor, Open WebUI, Chatbox, your own agent, or your chatbot and the server answers:
 
-## Requirements
+> `Free usage limit reached. Free models work in OpenCode`
 
-- [Bun](https://bun.sh) — `npm install -g bun`
-- opencode installed and signed in on the same machine (`opencode auth list` shows **OpenCode Console**)
-- Use opencode at least once recently — the proxy borrows one of your real opencode session IDs (see [limitations](#limitations))
+Copying the headers doesn't help. Running opencode in the background and piping prompts into it works, but then **opencode's agent runs its own tools**, so your harness's tools, your subagents, and your file access all break.
 
-## Quick start
+This project fixes that second half: it talks to opencode's model endpoint **directly** — your messages, your tools, your parameters — while satisfying the four server-side checks that make the free tier work outside the TUI.
 
-**Windows:** double-click **`setup.cmd`** — it verifies Bun, your opencode sign-in, and a recent session, then starts the proxy and prints the connection settings. Leave the window open.
+## ✨ Features
 
-**macOS / Linux:**
+| | |
+| --- | --- |
+| 🔌 **Drop-in OpenAI API** | `POST /v1/chat/completions`, `GET /v1/models` — point any OpenAI SDK at it |
+| 🛠️ **Native tool calling** | Your function schemas go out, your tool names come back. Subagents work. |
+| 🌊 **Streaming** | Real SSE with `[DONE]`; non-streaming clients are aggregated transparently |
+| 🧠 **Reasoning** | `reasoning_content` / `reasoning` deltas, `reasoning_effort`, `#high` / `#max` variants |
+| 🔁 **Auto token refresh** | Rotates opencode's OAuth credential and writes it back, so the CLI stays in sync |
+| 🪶 **Zero npm deps** | `spoof.mjs` uses Bun built-ins only — no supply chain to trust |
+| 🩺 **Self-checking** | One-click setup verifies Bun, sign-in, session freshness, and prompt drift |
+| 💸 **Free stays free** | Uses your existing quota — no extra accounts, no resale, no magic |
 
-```sh
-git clone <this repo> opencode-spoof
-cd opencode-spoof
-./setup.sh
-```
+## 🚀 Quick start
 
-**Manual** (any OS):
-
-```sh
-npm install          # only needed for the session-mode bridge and the test script
-bun setup-check.mjs  # preflight: Bun, sign-in, session, prompt
-bun spoof.mjs        # or: bun start
-```
-
-New to this? Read **[docs/SETUP.md](docs/SETUP.md)** — a step-by-step guide written for people who don't live in a terminal, including where to click in ZCode, Open WebUI, Chatbox, and others.
-
-You should see:
+**Prerequisites** — [opencode](https://opencode.ai) installed, signed in to OpenCode Console, and used at least once (send one message in it). [Bun](https://bun.sh) installed (`npm install -g bun`).
 
 ```text
+┌──────────────────────────────────────────────────────────────┐
+│  Windows            double-click  setup.cmd                  │
+│  macOS / Linux      ./setup.sh                                │
+│  Manual             bun run check && bun run start            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+You get a preflight report, then the proxy:
+
+```text
+  ✓ Bun 1.4.4
+  ✓ signed in as you@example.com / Default
+  ✓ newest opencode session is 3 min old
+  ✓ prompt matches installed opencode 2.2.5
+
 opencode spoof proxy v2 listening on http://127.0.0.1:8788
-  upstream      : https://opencode.ai/inference/openai/v1
-  identity      : opencode/latest/2.2.5/cli
-  prompt inject : on (14688 chars + override)
   tools merged  : 1 opencode tools kept
-  creds         : C:\Users\<you>\.local\share\opencode\opencode.db
-  account       : you@example.com / Default
-  prompt drift  : none — prompt captured from opencode 2.2.5, installed 2.2.5
+  prompt drift  : none
 ```
 
-Sanity check:
+Verify end to end:
 
 ```sh
-bun test-spoof.mjs
+bun run test        # streaming + custom tool → prints tool_calls and real usage
 ```
 
-It sends a streaming request with a custom tool and prints text, reasoning, `tool_calls`, and usage. A healthy run ends with `✓ proxy works`.
+### Connect anything
 
-## Connect any client
-
-| Setting  | Value                                    |
-| -------- | ---------------------------------------- |
-| Base URL | `http://127.0.0.1:8788/v1`               |
-| API key  | any non-empty string (ignored locally)   |
-| Model    | `glm-5.3-flash-free` (or any model from `GET /v1/models`) |
-
-```sh
-curl http://127.0.0.1:8788/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "glm-5.3-flash-free",
-    "messages": [{"role": "user", "content": "Hello"}],
-    "stream": true
-  }'
-```
-
-JavaScript (official OpenAI SDK):
+| Setting | Value |
+| --- | --- |
+| **Base URL** | `http://127.0.0.1:8788/v1` |
+| **API key** | anything (`opencode`) |
+| **Model** | `glm-5.3-flash-free` · `deepseek-v4.1-flash-free` · [50+ live models](http://127.0.0.1:8788/v1/models) |
 
 ```js
 import OpenAI from "openai"
-
 const client = new OpenAI({ baseURL: "http://127.0.0.1:8788/v1", apiKey: "opencode" })
 
 const res = await client.chat.completions.create({
   model: "glm-5.3-flash-free",
-  messages: [{ role: "user", content: "Hello" }],
-  tools: [{
-    type: "function",
-    function: {
-      name: "get_weather",
-      description: "Get the weather for a city",
-      parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
-    },
-  }],
+  messages: [{ role: "user", content: "Read package.json and summarize it" }],
+  tools: [{ type: "function", function: { name: "Read", description: "Read a file",
+    parameters: { type: "object", properties: { file_path: { type: "string" } } } } }],
   stream: true,
 })
-
-for await (const chunk of res) process.stdout.write(chunk.choices[0]?.delta?.content ?? "")
 ```
 
-Point agent harnesses at the same base URL. The proxy speaks plain OpenAI Chat Completions: your `messages`, `tools`, `tool_choice`, `temperature`, `max_tokens`, `stop`, and `reasoning_effort` all pass through, and tool calls come back under **your** tool names.
+Works with **ZCode, Open WebUI, Chatbox, Jan, LM Studio, SillyTavern, LangChain, CrewAI**, and anything else that speaks OpenAI. Click-by-click instructions: **[docs/SETUP.md](docs/SETUP.md)**.
 
-### Effort levels and models
+## 🧠 How it works, in one table
 
-- `GET /v1/models` — live upstream catalog (51 models, with `capabilities` including `tools` and `reasoning.effort`)
-- `reasoning_effort: "high"` — or pin it in the model name: `glm-5.3-flash-free#max`
-- Model names are provider-prefix tolerant: `glm-5.3-flash-free`, `opencode/glm-5.3-flash-free`, `anything/glm-5.3-flash-free` all work
-- Tested working: `glm-5.3-flash-free`, `deepseek-v4.1-flash-free`
+The free tier validates exactly four things. This is measured, not guessed — the full research log with every dead end is in **[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)**.
 
-## Two modes
-
-| Mode | Entry point | Port | Native tool calling | When to use |
-| --- | --- | --- | --- | --- |
-| **Spoof** (recommended) | `spoof.mjs` | 8788 | **yes** | Any harness, chatbot, or script. Stateless, direct API. |
-| Session bridge | `bridge.mjs` | 8787 | no | When you want opencode's own agent, tools, and session files in the loop. |
-
-The session bridge runs prompts through a real opencode session via `@opencode/client`; it works too, but it cannot forward *your* harness's tools (opencode owns its tool loop). The spoof proxy is the one that makes models feel native everywhere.
-
-## How it works (summary)
-
-The free tier does not check what it appears to check. Measured facts, not guesses:
-
-1. **Headers, TLS fingerprint, header order, project ID, `max_tokens` — all irrelevant.** Byte-identical requests were accepted or rejected depending only on these four things:
-2. **System prompt prefix** — `messages[0]` must be a system message that begins with one of opencode's own system prompts. The proxy prepends opencode's agent prompt plus an override that hands control back to your instructions.
-3. **`stream: true`** — required upstream. The proxy always streams and re-aggregates for non-streaming clients.
-4. **A recent, real session ID** — the `x-opencode-session*` headers must carry an ID that decodes to a recent session created by *your* opencode. The proxy borrows the newest one from opencode's local DB.
-5. **One tool named `read`** — the tools array must contain a tool literally named `read` (any schema). The proxy sends it disabled/neutered. Extra tools named `Read` or `Edit` are rejected, so those get renamed in flight and mapped back in responses.
-
-Everything else is yours. The full investigation — including five dead ends and the experiments that disproved them — is in **[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)**. A jargon-free version is in **[docs/PLAIN-ENGLISH.md](docs/PLAIN-ENGLISH.md)**.
-
-## What works
-
-| Feature | Status |
-| --- | --- |
-| `POST /v1/chat/completions` | yes |
-| `GET /v1/models` | yes (live upstream) |
-| Streaming SSE + `[DONE]` | yes |
-| Non-streaming clients | yes (aggregated transparently) |
-| Native function calling (`tools`, `tool_choice`) | yes — your tool names come back |
-| Multi-turn (`assistant`, `tool` messages) | yes |
-| `reasoning_content` / `reasoning` output | yes |
-| `reasoning_effort`, `model#high` / `#max` | yes |
-| `temperature`, `top_p`, `max_tokens`, `stop`, `seed` | passed through |
-| Real token usage (with `billing_source: free`) | yes |
-| Token auto-refresh (OAuth) | yes |
-| Embeddings, images, audio, `/v1/responses` | no |
-
-## FAQ
-
-**Does this work for someone who clones the repo?**
-Yes. The repository contains no credentials or account data. Each person's copy reads *their own* opencode login, *their own* session, and spends *their own* quota. They need opencode installed, signed in, and used at least once recently — `setup-check.mjs` verifies all three and tells them exactly what to fix.
-
-**What happens when opencode updates and changes the prompt?**
-The prompt is version-specific. The proxy compares the version recorded in `agent-prompt.json` with the version you have installed and prints `prompt drift: POSSIBLE` when they differ. If requests then fail, capture a fresh request and replace the prompt once — the recipe is in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) §2 and §10. The proxy cannot rebuild the prompt from the binary automatically because opencode stores it as scattered fragments.
-
-**Is there a no-terminal setup?**
-Yes — double-click `setup.cmd` on Windows, or follow [docs/SETUP.md](docs/SETUP.md), which is written without jargon and covers the exact clicks for common chat apps.
-
-**Is my request secretly being sent more than once?**
-No. One request in, one upstream request out. The only automatic retry is a single retry after an OAuth token refresh (HTTP 401). With `OPENCODE_SPOOF_DEBUG=1` every incoming request is written to `debug-requests.jsonl` so you can count them yourself.
-
-## Limitations
-
-- **The model sees a ~14.7 KB prompt prefix** on every request (~3.5 K tokens; mostly prompt-cached, so repeats cost ~700 tokens). An override tells it to follow your instructions, but the extra context is real.
-- **Session IDs expire.** The borrowed ID must stay recent; if you don't use opencode for about a day, requests fail until you open it once more.
-- **Tool-name rewriting.** Tools literally named `Read`/`Edit` are sent as `view_file`/`apply_patch` and mapped back in responses. Everything else passes untouched.
-- **One `read` stub tool** is always present (disabled) because the gate requires that exact name.
-- **Free quota is shared and per-IP.** Same bucket as your TUI — the proxy does not multiply it.
-- **opencode can break this at any time.** See the research notes for how to re-derive.
-
-## Troubleshooting
-
-| Symptom | Cause / fix |
-| --- | --- |
-| `FreeUsageLimitError` even though the TUI works | Request shape rejected. Check `GET /health` shows `prompt_inject: true`. If you changed the code, re-check the four rules in [How it works](#how-it-works-summary). |
-| `FreeUsageLimitError` and the TUI also fails | Real quota exhausted, per IP. Wait for the reset or use another network. |
-| Fails after a day away | Session ID aged out — open opencode once. |
-| `no active opencode OAuth connection` | Run `opencode` and sign in to OpenCode Console. |
-| Proxy not starting | Port in use: `opencode-spoof` uses 8788; set `OPENCODE_SPOOF_PORT`. |
-| Nothing responds | The process died. Restart with `bun spoof.mjs` / `start-spoof.cmd`. |
-
-## Configuration
-
-| Env var | Default | Purpose |
+| # | What the server checks | What the proxy does |
 | --- | --- | --- |
-| `OPENCODE_SPOOF_PORT` | `8788` | Local port |
-| `OPENCODE_SPOOF_HOST` | `127.0.0.1` | Bind address (keep local) |
-| `OPENCODE_PROMPT_INJECT` | `1` | Set `0` to disable prompt/tool injection (requests will be rejected by the gate) |
-| `OPENCODE_AGENT_PROMPT_FILE` | `./agent-prompt.json` | System prompt + required tool set |
-| `OPENCODE_PROJECT_ID` | from DB | `x-opencode-project` value |
-| `OPENCODE_DB` | `~/.local/share/opencode/opencode.db` | Credential/session store |
-| `OPENCODE_SPOOF_DIR` | cwd | Directory whose project ID to reuse |
-| `OPENCODE_SPOOF_TIMEOUT_MS` | `600000` | Upstream timeout |
-| `OPENCODE_SPOOF_DEBUG` | `0` | Set `1` to log incoming request bodies to `debug-requests.jsonl` |
+| 1 | `messages[0]` starts with an opencode system prompt | prepends it, then hands control back with an override; your prompt follows |
+| 2 | `stream: true` | always streams upstream, reassembles for non-stream clients |
+| 3 | a **recent real** session ID | borrows the newest one from opencode's own DB |
+| 4 | a tool named exactly `read`; no extra `Read`/`Edit` | sends one neutered `read` stub, renames yours in flight and maps back |
 
-## Files
+Everything else — headers, TLS, header order, JSON key order, project ID, temperature, tool count, message count — was tested and proven irrelevant.
 
-| File | Purpose |
-| --- | --- |
-| `spoof.mjs` | The proxy (no npm dependencies, Bun built-ins only) |
-| `bridge.mjs` | Session-mode bridge (OpenAI API → opencode session) |
-| `agent-prompt.json` | System prompt + source opencode version, captured from the CLI's own request |
-| `setup.cmd` / `setup.sh` | One-click setup: checks everything, then starts the proxy |
-| `setup-check.mjs` | Preflight checks (Bun, sign-in, recent session, prompt drift) |
-| `test-spoof.mjs` | Streaming + tool-calling smoke test |
-| `start-spoof.cmd` / `start.cmd` | Launchers without the checks |
-| `refresh-models.cmd` | Refresh and open the model catalog (session mode) |
-| `docs/SETUP.md` | Setup guide for non-technical users |
-| `docs/PLAIN-ENGLISH.md` | The whole thing explained without jargon |
-| `docs/HOW-IT-WORKS.md` | Full research log: experiments, dead ends, findings, re-derivation guide |
+## 📦 Monorepo layout
+
+```text
+opencode-spoof/
+├── setup.cmd / setup.sh      ← one-click setup (checks + start)
+├── refresh-models.cmd        ← refresh the model catalog (session mode)
+├── packages/
+│   ├── spoof/                ← the direct API proxy  (port 8788)
+│   │   ├── spoof.mjs
+│   │   ├── agent-prompt.json ← whitelisted prompt + source version
+│   │   ├── setup-check.mjs
+│   │   ├── test-spoof.mjs
+│   │   └── start.cmd
+│   └── bridge/               ← session bridge        (port 8787)
+│       ├── bridge.mjs        ← prompts through a real opencode session
+│       ├── probe-models.mjs
+│       └── start.cmd
+└── docs/
+    ├── SETUP.md              ← for non-nerds
+    ├── PLAIN-ENGLISH.md      ← the whole story, no jargon
+    └── HOW-IT-WORKS.md       ← research log + re-derivation guide
+```
+
+**Which one do I want?**
+
+| | `packages/spoof` | `packages/bridge` |
+| --- | --- | --- |
+| Your harness's tools | ✅ native | ❌ opencode runs its own |
+| Subagents / MCP / file tools | ✅ | ❌ |
+| Stateless | ✅ | ❌ opencode sessions |
+| Use when | always, unless you specifically want opencode's agent | you want opencode's tools & session files |
+
+## ⚠️ Limitations
+
+- **Prompt overhead:** ~14.7 KB (≈3.5K tokens) prepended per request, mostly prompt-cached.
+- **Session freshness:** the borrowed session expires if opencode isn't used for ~a day; open it once and it works again.
+- **Tool renaming:** tools literally named `Read`/`Edit` travel as `view_file`/`apply_patch` and are mapped back.
+- **Version drift:** the prompt is version-specific. The proxy warns when your opencode version differs from the captured one; refresh recipe in [HOW-IT-WORKS §2/§10](docs/HOW-IT-WORKS.md).
+- **Quota is per-IP and shared** with your opencode app. This does not create more AI — it just lets you use what you have from anywhere.
+
+## 🛑 Honest disclaimer
+
+This is a **compatibility tool for your own account**. It makes requests look like they came from opencode's own client. opencode intends free models to be used inside opencode, so this is very likely a **terms-of-service violation**, and they can change the checks at any time.
+
+- Use **your own** credentials. Never share your `opencode.db`.
+- Don't sell access, don't run it for others, don't hammer the free tier.
+- No warranty; if it breaks after an update, that's expected — the research notes exist so it can be fixed.
+
+If you're not comfortable with that trade, the sanctioned alternatives are the paid Zen API (`https://opencode.ai/zen/v1`) or any provider key you already own.
+
+## ❓ FAQ
+
+**Will it work for someone who clones it?** Yes — no credentials in the repo. Their copy uses their login, their session, their quota. They need opencode installed, signed in, and used once.
+
+**What's the latest opencode version?** npm `@opencode/cli` is **2.3.0** (Nov 2026); this prompt was captured from **2.2.5**, and `setup-check` flags any mismatch.
+
+**Does it secretly send extra requests?** No — one in, one out. Only a single retry after a 401 token refresh, plus one retry if the first connection dies fast.
+
+**Why not just use the paid API?** Because you have free models and want them in your own tools. That's the whole point.
+
+## 🧪 Development
+
+```sh
+bun run check     # preflight
+bun run start     # spoof proxy  :8788
+bun run bridge    # session mode :8787
+bun run test      # SDK + streaming + tool call
+```
+
+Diagnostics: `packages/bridge/probe-models.mjs` lists every model the local service exposes.
+
+## Contributing
+
+Issues and PRs welcome — especially:
+- fresh prompt captures when opencode ships a new version
+- client-specific setup instructions (add yours to `docs/SETUP.md`)
+- bug reports with `OPENCODE_SPOOF_DEBUG=1` logs
+
+⭐ **If this saves you a subscription or a headache, star the repo** — it helps other people find it.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The system prompt in `agent-prompt.json` belongs to opencode; it is included only as a runtime compatibility artifact.
+MIT — see [LICENSE](LICENSE). The system prompt in `packages/spoof/agent-prompt.json` belongs to opencode and is included only as a runtime compatibility artifact.

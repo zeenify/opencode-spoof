@@ -18,14 +18,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "agent-prompt.json" (
+if not exist "packages\spoof\agent-prompt.json" (
   echo   X  agent-prompt.json is missing from this folder.
   echo      Re-download the repository.
   pause
   exit /b 1
 )
 
-bun setup-check.mjs
+bun "packages\spoof\setup-check.mjs"
 if errorlevel 1 (
   echo.
   pause
@@ -41,5 +41,5 @@ echo ============================================
 echo.
 
 if not defined OPENCODE_SPOOF_PORT set OPENCODE_SPOOF_PORT=8788
-bun spoof.mjs
+bun "packages\spoof\spoof.mjs"
 pause

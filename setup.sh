@@ -8,7 +8,7 @@ if ! command -v bun >/dev/null 2>&1; then
   exit 1
 fi
 
-bun setup-check.mjs || exit 1
+bun packages/spoof/setup-check.mjs || exit 1
 
 echo "============================================"
 echo "  Base URL  http://127.0.0.1:8788/v1"
@@ -18,4 +18,4 @@ echo "  Keep this terminal open while you use it."
 echo "============================================"
 echo
 
-OPENCODE_SPOOF_PORT="${OPENCODE_SPOOF_PORT:-8788}" exec bun spoof.mjs
+OPENCODE_SPOOF_PORT="${OPENCODE_SPOOF_PORT:-8788}" exec bun packages/spoof/spoof.mjs

@@ -58,7 +58,7 @@ Where to paste them in common apps:
 With the setup window open, open a second terminal in the folder and run:
 
 ```sh
-bun test-spoof.mjs
+bun run test
 ```
 
 If the last line says `✓ proxy works`, everything is wired. Then ask your app a question.

@@ -95,7 +95,10 @@ const REFRESH_SKEW_MS = 5 * 60 * 1000
 // agent-prompts.json holds one prompt per opencode version; pick the one that
 // matches the installed version, else the file's default. Old single-prompt
 // files ("agent-prompt.json" with a top-level `system`) still load.
-const PROMPTS = JSON.parse(readFileSync(PROMPT_FILE, "utf8"))
+// OPENCODE_PROMPTS_B64 lets a compiled single-file build embed the prompts.
+const PROMPTS = process.env.OPENCODE_PROMPTS_B64
+  ? JSON.parse(Buffer.from(process.env.OPENCODE_PROMPTS_B64, "base64").toString("utf8"))
+  : JSON.parse(readFileSync(PROMPT_FILE, "utf8"))
 function selectPrompt() {
   if (!PROMPTS.prompts) return { version: PROMPTS.opencodeVersion ?? "unknown", system: PROMPTS.system, exact: true }
   const exact = INSTALLED_VERSION && PROMPTS.prompts[INSTALLED_VERSION]
@@ -816,6 +819,11 @@ try {
     console.error(`\n  Port ${PORT} is already in use - opencode-spoof looks like it is already running.`)
     console.error(`  Use the running instance, or start this one on another port:`)
     console.error(`      set OPENCODE_SPOOF_PORT=${PORT + 1} && bun spoof.mjs\n`)
+    // When launched by double-click the console would vanish before this is read.
+    if (process.stdin.isTTY) {
+      console.error("  Press Enter to close…")
+      await new Promise((r) => process.stdin.once("data", r))
+    }
     process.exit(1)
   }
   throw err

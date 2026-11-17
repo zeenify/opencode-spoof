@@ -8,7 +8,8 @@
     "start": "bun packages/spoof/spoof.mjs",
     "bridge": "bun packages/bridge/bridge.mjs",
     "check": "bun packages/spoof/setup-check.mjs",
-    "test": "bun packages/spoof/test-spoof.mjs"
+    "test": "bun packages/spoof/test-spoof.mjs",
+    "build:exe": "bun build packages/spoof/standalone-entry.mjs --compile --outfile dist/opencode-spoof.exe"
   },
   "keywords": [
     "opencode",

@@ -7,3 +7,5 @@ debug-requests.jsonl
 .DS_Store
 Thumbs.db
 dump-request.txt
+dist/
+*.exe
